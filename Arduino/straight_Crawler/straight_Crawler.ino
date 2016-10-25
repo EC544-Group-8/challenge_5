@@ -3,7 +3,6 @@
 // Control: PID
 // Actuation: Servos
 
-#include <LIDARLite.h>
 #include <PID_v1.h>
 #include <Servo.h>
 #include <Wire.h>
@@ -18,18 +17,24 @@ int startupDelay = 1000; // time to pause at each calibration step
 double maxSpeedOffset = 45; // maximum speed magnitude, in servo 'degrees'
 double maxWheelOffset = 85; // maximum wheel turn magnitude, in servo 'degrees'
 
+// Max SOnar Sensor
+const int sonarPin = 0; // used with the max sonar sensor
+long anVolt, inches, cm;
+int sum = 0; 
+int avgRange = 60;
+
+// Servo instances for controlling the vehicle
 Servo wheels;
 Servo esc;
 
-LIDARLite Lidr_left;
-LIDARLite Lidr_right;
-
+// PID variables
 double currentPos, steeringOut, setPos;
 double sKp = 1, sKi = 0, sKd = 0;
 double posError;
-
 PID steeringPID(&currentPos, &steeringOut, &setPos,
                 sKp, sKi,sKd,DIRECT);
+
+
 
 //================================================
 //                     Setup
@@ -42,10 +47,6 @@ void setup()
   calibrateESC();
 
   // LIDAR
-  Lidr_left.begin(0, true); // Set configuration to default and I2C to 400 kHz
-  Lidr_right.begin(0, true); // Set configuration to default and I2C to 400 kHz
-  Lidr_left.configure(0);
-  Lidr_right.configure(0);
 
   // Ultrasonic Collision
 }
@@ -55,8 +56,7 @@ void setup()
 //================================================
 void loop()
 {
-  double distLeft = Lidr_left.distance();
-  double distRight = Lidr_right.distance();
+
 }
 
 //================================================
@@ -91,6 +91,18 @@ void calibrateESC(){
     esc.write(90); // reset the ESC to neutral (non-moving) value
 }
 
+void calcSonar(void)
+{
+  for(int i = 0; i < avgRange; i++)
+  {
+    anVolt = analogRead(sonarPin) / 2;
+    sum += anVolt;
+    delay(10);
+  }
+  inches = sum / avgRange;
+  sum = 0;
+}
+
 //================================================
 //                  Sytem Notes
 //================================================
@@ -109,4 +121,3 @@ void calibrateESC(){
     lidarliteAddress: Default 0x62. Fill in new address here if changed. See
       operating manual for instructions.
 */
-
