@@ -53,13 +53,13 @@ app.get('/change_motion', function(req, res){
   // This motion_id is in the parameters from ajax call in main.js
 	var motion_id = String(req.query.motion_id);
 
-	if(motion_id == '1') {
-		console.log('sending RUN command to particle');
-	} else if(motion_id == '0') {
-		console.log('sending STOP command to particle');
-	} else {
-		console.log('Motion ID error: '+motion_id);
-	}
+	// if(motion_id == '1') {
+	// 	console.log('sending RUN command to particle');
+	// } else if(motion_id == '0') {
+	// 	console.log('sending STOP command to particle');
+	// } else {
+	// 	console.log('Motion ID error: '+motion_id);
+	// }
 	// Send to particle
 	var fnPr = particle.callFunction({
 		deviceId: '36001f000b47353235303037',	// This is the ID for "jester_jetpack"
@@ -68,12 +68,12 @@ app.get('/change_motion', function(req, res){
 		auth: token
 	});
 	
-	fnPr.then(
-	function(data) {
-		console.log('Function called succesfully:', data);
-	}, function(err) {
-		console.log('An error occurred:', err);
-	});
+	// fnPr.then(
+	// function(data) {
+	// 	console.log('Function called succesfully:', data);
+	// }, function(err) {
+	// 	console.log('An error occurred:', err);
+	// });
 	
 	// Let the main.js know that the AJAX worked
 	res.send('1');

@@ -10,11 +10,11 @@ $(document).ready(function () {
         console.log('Trying to tell the particle to run');
         var parameters = {motion_id : event.data.state};
         $.get('/change_motion', parameters, function(data) {
-            if(data > 0) {
-                console.log('particle ' + parameters.motion_id + ' worked');
-            } else {
-                console.log('particle ' + parameters.motion_id + ' did NOT work');
-            }
+            // if(data > 0) {
+            //     console.log('particle ' + parameters.motion_id + ' worked');
+            // } else {
+            //     console.log('particle ' + parameters.motion_id + ' did NOT work');
+            // }
         });
     }
 
