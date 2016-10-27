@@ -19,7 +19,11 @@ int startupDelay = 1000; // time to pause at each calibration step
 double maxSpeedOffset = 45; // maximum speed magnitude, in servo 'degrees'
 double maxWheelOffset = 85; // maximum wheel turn magnitude, in servo 'degrees'
 
-// Max SOnar Sensor
+// Motion ID for stop and start from node.js app
+int new_motion(String new_id); // Need forward declaration for use in "setup" loop (note, must take a string, return an int to work)
+String motion_id = "0";
+
+// Max Sonar Sensor
 const int sonarPin = 0; // used with the max sonar sensor
 long anVolt, inches, cm;
 int sum = 0; 
@@ -43,6 +47,9 @@ PID steeringPID(&currentPos, &steeringOut, &setPos,
 //================================================
 void setup()
 {
+  // Motion change function needs to be declared so its accessible to node.js app (through Particle cloud) 
+  Particle.function("new_motion", new_motion);
+
   // Wheels and Motor
   wheels.attach(D1);
   esc.attach(D0);
@@ -58,23 +65,29 @@ void setup()
 //================================================
 void loop()
 {
-    calcSonar();
-    while(inches > 125)
-    {
-        calcSonar();
-        String dist = String(inches);
-        Particle.publish("DEBUG",dist);
-        wheels.write(90);
-        esc.write(80);
-    }
-    delay(50);
-    wheels.write(90);
-    esc.write(90);
+  calcSonar();
+  while(motion_id == "1" && inches > 125)
+  {
+      calcSonar();
+      String dist = String(inches);
+      Particle.publish("DEBUG",dist);
+      wheels.write(90);
+      esc.write(80);
+  }
+  delay(10);
+  wheels.write(90);
+  esc.write(90); 
+
 }
 
 //================================================
 //                  Functions
 //================================================
+int new_motion(String new_id){
+  motion_id = new_id;
+  return 1;
+}
+
 void steeringPIDloop(void)
 {
   posError = currentPos - setPos;
