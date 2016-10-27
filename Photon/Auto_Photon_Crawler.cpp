@@ -14,12 +14,20 @@
 //================================================
 //                     Globals
 //================================================
+
+
 bool startup = true; // used to ensure startup only happens once
 int startupDelay = 1000; // time to pause at each calibration step
 double maxSpeedOffset = 45; // maximum speed magnitude, in servo 'degrees'
 double maxWheelOffset = 85; // maximum wheel turn magnitude, in servo 'degrees'
 
-// Max SOnar Sensor
+// Lidar Lite V1
+#define     LIDARLite_ADDRESS   0x62        // Default I2C Address of LIDAR-Lite.
+#define     RegisterMeasure     0x00        // Register to write to initiate ranging.
+#define     MeasureValue        0x04        // Value to initiate ranging.
+#define     RegisterHighLowB    0x8f        // Register to get both High and Low bytes in 1 call.
+int lidar_dist = 0;
+// Max Sonar Sensor
 const int sonarPin = 0; // used with the max sonar sensor
 long anVolt, inches, cm;
 int sum = 0; 
@@ -44,11 +52,12 @@ PID steeringPID(&currentPos, &steeringOut, &setPos,
 void setup()
 {
   // Wheels and Motor
-  wheels.attach(D1);
-  esc.attach(D0);
+  wheels.attach(D3);
+  esc.attach(D2);
   calibrateESC();
 
   // LIDAR
+  Wire.begin();
 
   // Ultrasonic Collision
 }
@@ -59,16 +68,17 @@ void setup()
 void loop()
 {
     calcSonar();
-    while(inches > 125)
+    while(inches > 175)
     {
         calcSonar();
         String dist = String(inches);
         Particle.publish("DEBUG",dist);
-        wheels.write(90);
+        wheels.write(80);
+        calcLidar();
         esc.write(80);
     }
     delay(50);
-    wheels.write(90);
+    wheels.write(80);
     esc.write(90);
 }
 
@@ -112,10 +122,37 @@ void calcSonar(void)
     sum += anVolt;
     delay(10);
   }
-  inches = sum / avgRange;
+  inches = (sum / avgRange)-100;    // Manal calibration 
   sum = 0;
 }
 
+
+void calcLidar(void)
+{
+    Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
+    Wire.write((int)RegisterMeasure); // sets register pointer to  (0x00)  
+    Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
+    Wire.endTransmission(); // stop transmitting
+
+    delay(20); // Wait 20ms for transmit
+
+    Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
+    Wire.write((int)RegisterHighLowB); // sets register pointer to (0x8f)
+    Wire.endTransmission(); // stop transmitting
+
+    delay(20); // Wait 20ms for transmit
+
+    Wire.requestFrom((int)LIDARLite_ADDRESS, 2); // request 2 bytes from LIDAR-Lite
+
+    if(2 <= Wire.available()) // if two bytes were received
+    {
+        lidar_dist = Wire.read(); // receive high byte (overwrites previous reading)
+        lidar_dist = lidar_dist << 8; // shift high byte to be high 8 bits
+        lidar_dist |= Wire.read(); // receive low byte as lower 8 bits
+        Particle.publish("DEBUG","This is from LIDAR...");
+        Particle.publish("DEBUG",String(lidar_dist));
+    }
+}
 //================================================
 //                  Sytem Notes
 //================================================
