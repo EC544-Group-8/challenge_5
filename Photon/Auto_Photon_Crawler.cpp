@@ -10,12 +10,10 @@
 //#include <Servo.h>
 #include "math.h"
 
-
 //================================================
 //                     Globals
-//================================================
-
-
+//================================================ 
+#define MAX_SONAR_VALUE 60 // 5ft
 bool startup = true; // used to ensure startup only happens once
 int startupDelay = 1000; // time to pause at each calibration step
 double maxSpeedOffset = 45; // maximum speed magnitude, in servo 'degrees'
@@ -26,8 +24,10 @@ double maxWheelOffset = 85; // maximum wheel turn magnitude, in servo 'degrees'
 #define     RegisterMeasure     0x00        // Register to write to initiate ranging.
 #define     MeasureValue        0x04        // Value to initiate ranging.
 #define     RegisterHighLowB    0x8f        // Register to get both High and Low bytes in 1 call.
+
 int lidar_dist_front = 0;
 int lidar_dist_back = 0;
+double deltaD = 0;
 
 // Motion ID for stop and start from node.js app
 int new_motion(String new_id); // Need forward declaration for use in "setup" loop (note, must take a string, return an int to work)
@@ -44,12 +44,12 @@ Servo wheels;
 Servo esc;
 
 // PID variables
-double currentPos, steeringOut, setPos;
+double steeringOut = 0;
+double setPos = 0;
 double sKp = 1, sKi = 0, sKd = 0;
 double posError;
-PID steeringPID(&currentPos, &steeringOut, &setPos,
+PID steeringPID(&deltaD, &steeringOut, &setPos,
                 sKp, sKi,sKd,PID::DIRECT);
-
 
 
 //================================================
@@ -60,6 +60,9 @@ void setup()
   // Motion change function needs to be declared so its accessible to node.js app (through Particle cloud) 
   Particle.function("new_motion", new_motion);
 
+  // Enable Serial
+  Serial.begin(9600);
+  
   // Wheels and Motor
   wheels.attach(D3);
   esc.attach(D2);
@@ -71,6 +74,11 @@ void setup()
   pinMode(D5,OUTPUT);
 
   // Ultrasonic Collision
+  
+  // PID
+  steeringPID.SetSampleTime(100);
+  steeringPID.SetOutputLimits(-90,90);
+  steeringPID.SetMode(PID::AUTOMATIC);
 }
 
 //================================================
@@ -79,14 +87,17 @@ void setup()
 void loop()
 {
   calcSonar();
-  while(inches > 200)//motion_id == "1" && 
+  Serial.println(inches);
+  while(inches > MAX_SONAR_VALUE)//motion_id == "1" && 
   {
       calcSonar();
       String dist = String(inches);
       Particle.publish("SONAR",dist);
-      wheels.write(80);
+      Serial.println("SONAR" + dist);
       calcLidar();
+      steeringPIDloop();
       esc.write(70);
+      Serial.println(steeringOut);
   }
   delay(10);
   wheels.write(80);
@@ -104,10 +115,10 @@ int new_motion(String new_id){
 
 void steeringPIDloop(void)
 {
-  posError = currentPos - setPos;
+  //posError = deltaD - setPos;
   steeringPID.SetTunings(sKp,sKi,sKd);
   steeringPID.Compute();
-  wheels.write(1);
+  wheels.write(90+steeringOut);
 }
 
 // Convert degree value to radians 
@@ -135,11 +146,11 @@ void calcSonar(void)
 {
   for(int i = 0; i < avgRange; i++)
   {
-    anVolt = analogRead(sonarPin) / 2;
+    anVolt = analogRead(sonarPin) / 8;
     sum += anVolt;
     delay(10);
   }
-  inches = (sum / avgRange)-100;    // Manal calibration 
+  inches = (sum / avgRange);    // Manal calibration 
   sum = 0;
 }
 
@@ -170,10 +181,13 @@ void calcLidar(void)
         lidar_dist_front = Wire.read(); // receive high byte (overwrites previous reading)
         lidar_dist_front = lidar_dist_front << 8; // shift high byte to be high 8 bits
         lidar_dist_front |= Wire.read(); // receive low byte as lower 8 bits
+        Serial.print(lidar_dist_front);
+        lidar_dist_front = lidar_dist_front + 15;
         String debug1 = "FRONT LIDAR...";
         debug1.concat(String(lidar_dist_front));
         Particle.publish("DEBUG", debug1);
-        //delay(1000);
+        Serial.println("DEBUG" + debug1);
+        
     }
     // ---------  END FRONT LIDAR  -------------
     
@@ -204,13 +218,20 @@ void calcLidar(void)
         String debug2 = "BACK LIDAR...";
         debug2.concat(String(lidar_dist_back));
         Particle.publish("DEBUG", debug2);
+        Serial.println("DEBUG" + debug2);
         //delay(1000);
         // Particle.publish("DEBUG",String(lidar_dist_back));
     }
     
     // ---------  END BACK LIDAR  -------------
-    
+  
+  // Calculate deltaD
+  deltaD = lidar_dist_back - lidar_dist_front;
+  Particle.publish("DELTA", String(deltaD));
+  Serial.println("DELTA" + String(deltaD));
+  // Print serial deltaD here 
 }
+
 //================================================
 //                  Sytem Notes
 //================================================
