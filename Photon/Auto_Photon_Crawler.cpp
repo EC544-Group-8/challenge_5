@@ -26,7 +26,8 @@ double maxWheelOffset = 85; // maximum wheel turn magnitude, in servo 'degrees'
 #define     RegisterMeasure     0x00        // Register to write to initiate ranging.
 #define     MeasureValue        0x04        // Value to initiate ranging.
 #define     RegisterHighLowB    0x8f        // Register to get both High and Low bytes in 1 call.
-int lidar_dist = 0;
+int lidar_dist_front = 0;
+int lidar_dist_back = 0;
 
 // Motion ID for stop and start from node.js app
 int new_motion(String new_id); // Need forward declaration for use in "setup" loop (note, must take a string, return an int to work)
@@ -66,6 +67,8 @@ void setup()
 
   // LIDAR
   Wire.begin();
+  pinMode(D4,OUTPUT);
+  pinMode(D5,OUTPUT);
 
   // Ultrasonic Collision
 }
@@ -76,14 +79,14 @@ void setup()
 void loop()
 {
   calcSonar();
-  while(motion_id == "1" && inches > 175)
+  while(inches > 200)//motion_id == "1" && 
   {
       calcSonar();
       String dist = String(inches);
-      Particle.publish("DEBUG",dist);
+      Particle.publish("SONAR",dist);
       wheels.write(80);
       calcLidar();
-      esc.write(80);
+      esc.write(70);
   }
   delay(10);
   wheels.write(80);
@@ -143,6 +146,10 @@ void calcSonar(void)
 
 void calcLidar(void)
 {
+    // ---------  THIS IS FOR THE FRONT LIDAR  -------------
+    digitalWrite(D5,LOW);
+    digitalWrite(D4,HIGH);
+    delay(1);
     Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
     Wire.write((int)RegisterMeasure); // sets register pointer to  (0x00)  
     Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
@@ -160,12 +167,49 @@ void calcLidar(void)
 
     if(2 <= Wire.available()) // if two bytes were received
     {
-        lidar_dist = Wire.read(); // receive high byte (overwrites previous reading)
-        lidar_dist = lidar_dist << 8; // shift high byte to be high 8 bits
-        lidar_dist |= Wire.read(); // receive low byte as lower 8 bits
-        Particle.publish("DEBUG","This is from LIDAR...");
-        Particle.publish("DEBUG",String(lidar_dist));
+        lidar_dist_front = Wire.read(); // receive high byte (overwrites previous reading)
+        lidar_dist_front = lidar_dist_front << 8; // shift high byte to be high 8 bits
+        lidar_dist_front |= Wire.read(); // receive low byte as lower 8 bits
+        String debug1 = "FRONT LIDAR...";
+        debug1.concat(String(lidar_dist_front));
+        Particle.publish("DEBUG", debug1);
+        //delay(1000);
     }
+    // ---------  END FRONT LIDAR  -------------
+    
+    // ---------  THIS IS FOR THE BACK LIDAR  -------------
+    digitalWrite(D4,LOW);
+    digitalWrite(D5,HIGH);
+    delay(1);
+    Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
+    Wire.write((int)RegisterMeasure); // sets register pointer to  (0x00)  
+    Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
+    Wire.endTransmission(); // stop transmitting
+
+    delay(20); // Wait 20ms for transmit
+
+    Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
+    Wire.write((int)RegisterHighLowB); // sets register pointer to (0x8f)
+    Wire.endTransmission(); // stop transmitting
+
+    delay(20); // Wait 20ms for transmit
+
+    Wire.requestFrom((int)LIDARLite_ADDRESS, 2); // request 2 bytes from LIDAR-Lite
+
+    if(2 <= Wire.available()) // if two bytes were received
+    {
+        lidar_dist_back = Wire.read(); // receive high byte (overwrites previous reading)
+        lidar_dist_back = lidar_dist_back << 8; // shift high byte to be high 8 bits
+        lidar_dist_back |= Wire.read(); // receive low byte as lower 8 bits
+        String debug2 = "BACK LIDAR...";
+        debug2.concat(String(lidar_dist_back));
+        Particle.publish("DEBUG", debug2);
+        //delay(1000);
+        // Particle.publish("DEBUG",String(lidar_dist_back));
+    }
+    
+    // ---------  END BACK LIDAR  -------------
+    
 }
 //================================================
 //                  Sytem Notes
