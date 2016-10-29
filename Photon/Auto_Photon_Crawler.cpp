@@ -13,10 +13,11 @@
 //================================================
 //                     Globals
 //================================================ 
-#define MIN_SONAR_VALUE 60 // 5ft original
+#define MIN_SONAR_VALUE 30 // 5ft original
 #define LIDAR_CALIBRATE_DIFFERENCE 8
 #define DEBUG 0 // 1 for debug mode, 0 for no, debug will disable motor and ultrasonic blocking
 #define DEBUG_CLOUD 0 // Debug cloud 1 will publish to particle cloud
+#define TRANSMIT_DELAY 15
 
 bool startup = true; // used to ensure startup only happens once
 int startupDelay = 1000; // time to pause at each calibration step
@@ -43,7 +44,7 @@ String motion_id = "0";
 const int sonarPin = 0; // used with the max sonar sensor
 long anVolt, inches, cm;
 int sum = 0; 
-int avgRange = 60;
+int avgRange = 10;
 
 // Servo instances for controlling the vehicle
 Servo wheels;
@@ -119,7 +120,7 @@ void loop()
       wheels.write(90+(steeringOut - driftOut)/2);
       //avg outputs and write them to the servo
       if(!DEBUG)
-        esc.write(75);
+        esc.write(65);
       Serial.println("Steeringout: " + String(steeringOut));
       Serial.println("Driftout: " + String(driftOut));
   }
@@ -199,13 +200,13 @@ void calcLidar(void)
         Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
         Wire.endTransmission(); // stop transmitting
     
-        delay(20); // Wait 20ms for transmit
+        delay(TRANSMIT_DELAY); // Wait 20ms for transmit
     
         Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
         Wire.write((int)RegisterHighLowB); // sets register pointer to (0x8f)
         Wire.endTransmission(); // stop transmitting
     
-        delay(20); // Wait 20ms for transmit
+        delay(TRANSMIT_DELAY); // Wait 20ms for transmit
     
         Wire.requestFrom((int)LIDARLite_ADDRESS, 2); // request 2 bytes from LIDAR-Lite
     
@@ -240,13 +241,13 @@ void calcLidar(void)
         Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
         Wire.endTransmission(); // stop transmitting
     
-        delay(20); // Wait 20ms for transmit
+        delay(TRANSMIT_DELAY); // Wait 20ms for transmit
     
         Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
         Wire.write((int)RegisterHighLowB); // sets register pointer to (0x8f)
         Wire.endTransmission(); // stop transmitting
     
-        delay(20); // Wait 20ms for transmit
+        delay(TRANSMIT_DELAY); // Wait 20ms for transmit
     
         Wire.requestFrom((int)LIDARLite_ADDRESS, 2); // request 2 bytes from LIDAR-Lite
     
