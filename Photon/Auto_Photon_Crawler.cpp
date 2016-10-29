@@ -13,7 +13,7 @@
 //================================================
 //                     Globals
 //================================================ 
-#define MIN_SONAR_VALUE 36 // 5ft original
+#define MIN_SONAR_VALUE 60 // 5ft original
 #define LIDAR_CALIBRATE_DIFFERENCE 8
 #define DEBUG 0 // 1 for debug mode, 0 for no, debug will disable motor and ultrasonic blocking
 #define DEBUG_CLOUD 0 // Debug cloud 1 will publish to particle cloud
@@ -52,15 +52,15 @@ Servo esc;
 // PID variables
 double steeringOut = 0;
 double setPos = 0;
-double sKp = 2, sKi = 0, sKd = 0;
+double sKp = 2.0, sKi = 0, sKd = 0.1;
 double posError;
 PID steeringPID(&deltaD, &steeringOut, &setPos,
                 sKp, sKi,sKd,PID::DIRECT);
                 
 double distOfWall;
 double driftOut;
-double driftSetPos = 70;
-double dKp = 1.5,dKi= 0,dKd = 0;
+double driftSetPos = 90;
+double dKp = 1.5,dKi= .25,dKd = 0;
 PID driftPID(&distOfWall, &driftOut, & driftSetPos,
               dKp,dKi,dKd,PID::DIRECT);
 
@@ -119,8 +119,9 @@ void loop()
       wheels.write(90+(steeringOut - driftOut)/2);
       //avg outputs and write them to the servo
       if(!DEBUG)
-        esc.write(70);
+        esc.write(75);
       Serial.println("Steeringout: " + String(steeringOut));
+      Serial.println("Driftout: " + String(driftOut));
   }
   delay(10);
   wheels.write(80);
@@ -213,6 +214,7 @@ void calcLidar(void)
             lidar_dist_front = Wire.read(); // receive high byte (overwrites previous reading)
             lidar_dist_front = lidar_dist_front << 8; // shift high byte to be high 8 bits
             lidar_dist_front |= Wire.read(); // receive low byte as lower 8 bits
+            lidar_dist_front += LIDAR_CALIBRATE_DIFFERENCE;
             if(lidar_dist_front > 140 || lidar_dist_front < 10)
             {
                 lidar_dist_front = last_lidar_dist_front;
@@ -282,7 +284,7 @@ void calcLidar(void)
   {
       distOfWall = lidar_dist_back;
   }
-  deltaD -= LIDAR_CALIBRATE_DIFFERENCE;
+//   deltaD -= LIDAR_CALIBRATE_DIFFERENCE;
   //distOfWall = (lidar_dist_back + lidar_dist_front)/2;
   if (DEBUG_CLOUD)
     Particle.publish("DELTA", String(deltaD));
