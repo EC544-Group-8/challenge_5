@@ -13,7 +13,11 @@
 //================================================
 //                     Globals
 //================================================ 
-#define MAX_SONAR_VALUE 60 // 5ft
+#define MIN_SONAR_VALUE 36 // 5ft original
+#define LIDAR_CALIBRATE_DIFFERENCE 8
+#define DEBUG 0 // 1 for debug mode, 0 for no, debug will disable motor and ultrasonic blocking
+#define DEBUG_CLOUD 0 // Debug cloud 1 will publish to particle cloud
+
 bool startup = true; // used to ensure startup only happens once
 int startupDelay = 1000; // time to pause at each calibration step
 double maxSpeedOffset = 45; // maximum speed magnitude, in servo 'degrees'
@@ -26,7 +30,9 @@ double maxWheelOffset = 85; // maximum wheel turn magnitude, in servo 'degrees'
 #define     RegisterHighLowB    0x8f        // Register to get both High and Low bytes in 1 call.
 
 int lidar_dist_front = 0;
+int last_lidar_dist_front = 0;
 int lidar_dist_back = 0;
+int last_lidar_dist_back = 0;
 double deltaD = 0;
 
 // Motion ID for stop and start from node.js app
@@ -46,10 +52,17 @@ Servo esc;
 // PID variables
 double steeringOut = 0;
 double setPos = 0;
-double sKp = 1, sKi = 0, sKd = 0;
+double sKp = 2, sKi = 0, sKd = 0;
 double posError;
 PID steeringPID(&deltaD, &steeringOut, &setPos,
                 sKp, sKi,sKd,PID::DIRECT);
+                
+double distOfWall;
+double driftOut;
+double driftSetPos = 70;
+double dKp = 1.5,dKi= 0,dKd = 0;
+PID driftPID(&distOfWall, &driftOut, & driftSetPos,
+              dKp,dKi,dKd,PID::DIRECT);
 
 
 //================================================
@@ -66,7 +79,8 @@ void setup()
   // Wheels and Motor
   wheels.attach(D3);
   esc.attach(D2);
-  calibrateESC();
+  if(!DEBUG)
+    calibrateESC();
 
   // LIDAR
   Wire.begin();
@@ -77,8 +91,12 @@ void setup()
   
   // PID
   steeringPID.SetSampleTime(100);
-  steeringPID.SetOutputLimits(-90,90);
+  steeringPID.SetOutputLimits(-80,80);
   steeringPID.SetMode(PID::AUTOMATIC);
+  
+  driftPID.SetSampleTime(100);
+  driftPID.SetOutputLimits(-80,80);
+  driftPID.SetMode(PID::AUTOMATIC); 
 }
 
 //================================================
@@ -87,17 +105,22 @@ void setup()
 void loop()
 {
   calcSonar();
-  Serial.println(inches);
-  while(inches > MAX_SONAR_VALUE)//motion_id == "1" && 
+  Serial.println("Inches: " + String(inches));
+  while(inches > MIN_SONAR_VALUE || DEBUG)//motion_id == "1" && 
   {
       calcSonar();
       String dist = String(inches);
-      Particle.publish("SONAR",dist);
-      Serial.println("SONAR" + dist);
+      if(DEBUG_CLOUD)
+        Particle.publish("SONAR",dist);
+      Serial.println("SONAR: " + dist);
       calcLidar();
       steeringPIDloop();
-      esc.write(70);
-      Serial.println(steeringOut);
+      driftPIDloop();
+      wheels.write(90+(steeringOut - driftOut)/2);
+      //avg outputs and write them to the servo
+      if(!DEBUG)
+        esc.write(70);
+      Serial.println("Steeringout: " + String(steeringOut));
   }
   delay(10);
   wheels.write(80);
@@ -115,10 +138,16 @@ int new_motion(String new_id){
 
 void steeringPIDloop(void)
 {
-  //posError = deltaD - setPos;
   steeringPID.SetTunings(sKp,sKi,sKd);
   steeringPID.Compute();
-  wheels.write(90+steeringOut);
+  //wheels.write(90+steeringOut);
+}
+
+void driftPIDloop(void)
+{
+  driftPID.SetTunings(dKp,dKi,dKd);
+  driftPID.Compute();
+  //wheels.write(90+steeringOut); 
 }
 
 // Convert degree value to radians 
@@ -157,79 +186,109 @@ void calcSonar(void)
 
 void calcLidar(void)
 {
-    // ---------  THIS IS FOR THE FRONT LIDAR  -------------
-    digitalWrite(D5,LOW);
-    digitalWrite(D4,HIGH);
-    delay(1);
-    Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
-    Wire.write((int)RegisterMeasure); // sets register pointer to  (0x00)  
-    Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
-    Wire.endTransmission(); // stop transmitting
-
-    delay(20); // Wait 20ms for transmit
-
-    Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
-    Wire.write((int)RegisterHighLowB); // sets register pointer to (0x8f)
-    Wire.endTransmission(); // stop transmitting
-
-    delay(20); // Wait 20ms for transmit
-
-    Wire.requestFrom((int)LIDARLite_ADDRESS, 2); // request 2 bytes from LIDAR-Lite
-
-    if(2 <= Wire.available()) // if two bytes were received
-    {
-        lidar_dist_front = Wire.read(); // receive high byte (overwrites previous reading)
-        lidar_dist_front = lidar_dist_front << 8; // shift high byte to be high 8 bits
-        lidar_dist_front |= Wire.read(); // receive low byte as lower 8 bits
-        Serial.print(lidar_dist_front);
-        lidar_dist_front = lidar_dist_front + 15;
-        String debug1 = "FRONT LIDAR...";
-        debug1.concat(String(lidar_dist_front));
-        Particle.publish("DEBUG", debug1);
-        Serial.println("DEBUG" + debug1);
+    // int lidar_dist_back_avg, lidar_dist_front_avg = 0;
+    // int n_samples = 3;
+    // for(int i = 0; i < n_samples; i++){
+        // ---------  THIS IS FOR THE FRONT LIDAR  -------------
+        digitalWrite(D5,LOW);
+        digitalWrite(D4,HIGH);
+        delay(5);
+        Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
+        Wire.write((int)RegisterMeasure); // sets register pointer to  (0x00)  
+        Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
+        Wire.endTransmission(); // stop transmitting
+    
+        delay(20); // Wait 20ms for transmit
+    
+        Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
+        Wire.write((int)RegisterHighLowB); // sets register pointer to (0x8f)
+        Wire.endTransmission(); // stop transmitting
+    
+        delay(20); // Wait 20ms for transmit
+    
+        Wire.requestFrom((int)LIDARLite_ADDRESS, 2); // request 2 bytes from LIDAR-Lite
+    
+        if(2 <= Wire.available()) // if two bytes were received
+        {
+            lidar_dist_front = Wire.read(); // receive high byte (overwrites previous reading)
+            lidar_dist_front = lidar_dist_front << 8; // shift high byte to be high 8 bits
+            lidar_dist_front |= Wire.read(); // receive low byte as lower 8 bits
+            if(lidar_dist_front > 140 || lidar_dist_front < 10)
+            {
+                lidar_dist_front = last_lidar_dist_front;
+            }
+            
+            last_lidar_dist_front = lidar_dist_front;
+            // lidar_dist_front_avg += lidar_dist_front;
+            String debug1 = "FRONT LIDAR...";
+            debug1.concat(String(lidar_dist_front));
+            if(DEBUG_CLOUD)
+                Particle.publish("DEBUG", debug1);
+            Serial.println(debug1);
+            
+        }
+        // ---------  END FRONT LIDAR  -------------
         
-    }
-    // ---------  END FRONT LIDAR  -------------
+        // ---------  THIS IS FOR THE BACK LIDAR  -------------
+        digitalWrite(D4,LOW);
+        digitalWrite(D5,HIGH);
+        delay(5);
+        Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
+        Wire.write((int)RegisterMeasure); // sets register pointer to  (0x00)  
+        Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
+        Wire.endTransmission(); // stop transmitting
     
-    // ---------  THIS IS FOR THE BACK LIDAR  -------------
-    digitalWrite(D4,LOW);
-    digitalWrite(D5,HIGH);
-    delay(1);
-    Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
-    Wire.write((int)RegisterMeasure); // sets register pointer to  (0x00)  
-    Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
-    Wire.endTransmission(); // stop transmitting
-
-    delay(20); // Wait 20ms for transmit
-
-    Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
-    Wire.write((int)RegisterHighLowB); // sets register pointer to (0x8f)
-    Wire.endTransmission(); // stop transmitting
-
-    delay(20); // Wait 20ms for transmit
-
-    Wire.requestFrom((int)LIDARLite_ADDRESS, 2); // request 2 bytes from LIDAR-Lite
-
-    if(2 <= Wire.available()) // if two bytes were received
-    {
-        lidar_dist_back = Wire.read(); // receive high byte (overwrites previous reading)
-        lidar_dist_back = lidar_dist_back << 8; // shift high byte to be high 8 bits
-        lidar_dist_back |= Wire.read(); // receive low byte as lower 8 bits
-        String debug2 = "BACK LIDAR...";
-        debug2.concat(String(lidar_dist_back));
-        Particle.publish("DEBUG", debug2);
-        Serial.println("DEBUG" + debug2);
-        //delay(1000);
-        // Particle.publish("DEBUG",String(lidar_dist_back));
-    }
+        delay(20); // Wait 20ms for transmit
     
+        Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
+        Wire.write((int)RegisterHighLowB); // sets register pointer to (0x8f)
+        Wire.endTransmission(); // stop transmitting
+    
+        delay(20); // Wait 20ms for transmit
+    
+        Wire.requestFrom((int)LIDARLite_ADDRESS, 2); // request 2 bytes from LIDAR-Lite
+    
+        if(2 <= Wire.available()) // if two bytes were received
+        {
+            lidar_dist_back = Wire.read(); // receive high byte (overwrites previous reading)
+            lidar_dist_back = lidar_dist_back << 8; // shift high byte to be high 8 bits
+            lidar_dist_back |= Wire.read(); // receive low byte as lower 8 bits
+            if(lidar_dist_back > 140 || lidar_dist_back < 10)
+            {
+                lidar_dist_back = last_lidar_dist_back;
+            }
+            
+            last_lidar_dist_back = lidar_dist_back;
+            // lidar_dist_back_avg += lidar_dist_back;
+            String debug2 = "BACK LIDAR...";
+            debug2.concat(String(lidar_dist_back));
+            if (DEBUG_CLOUD)
+                Particle.publish("DEBUG", debug2);
+            Serial.println(debug2);
+            //delay(1000);
+            // Particle.publish("DEBUG",String(lidar_dist_back));
+        }
+    // lidar_dist_back = lidar_dist_back_avg / n_samples;
+    // lidar_dist_front = lidar_dist_front_avg / n_samples;
     // ---------  END BACK LIDAR  -------------
   
   // Calculate deltaD
   deltaD = lidar_dist_back - lidar_dist_front;
-  Particle.publish("DELTA", String(deltaD));
-  Serial.println("DELTA" + String(deltaD));
+  if(deltaD > 0)
+  {
+      distOfWall = lidar_dist_front;
+  }
+  else
+  {
+      distOfWall = lidar_dist_back;
+  }
+  deltaD -= LIDAR_CALIBRATE_DIFFERENCE;
+  //distOfWall = (lidar_dist_back + lidar_dist_front)/2;
+  if (DEBUG_CLOUD)
+    Particle.publish("DELTA", String(deltaD));
+  Serial.println("DELTA: " + String(deltaD));
   // Print serial deltaD here 
+    // }
 }
 
 //================================================
