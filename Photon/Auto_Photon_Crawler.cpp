@@ -13,7 +13,7 @@
 //================================================
 //                     Globals
 //================================================ 
-#define MIN_SONAR_VALUE 30 // 5ft original
+#define MIN_SONAR_VALUE 48 // 5ft original
 #define LIDAR_CALIBRATE_DIFFERENCE 8
 #define DEBUG 0 // 1 for debug mode, 0 for no, debug will disable motor and ultrasonic blocking
 #define DEBUG_CLOUD 0 // Debug cloud 1 will publish to particle cloud
@@ -23,6 +23,8 @@ bool startup = true; // used to ensure startup only happens once
 int startupDelay = 1000; // time to pause at each calibration step
 double maxSpeedOffset = 45; // maximum speed magnitude, in servo 'degrees'
 double maxWheelOffset = 85; // maximum wheel turn magnitude, in servo 'degrees'
+int left_led = D6;
+int right_led = D7;
 
 // Lidar Lite V1
 #define     LIDARLite_ADDRESS   0x62        // Default I2C Address of LIDAR-Lite.
@@ -44,24 +46,29 @@ String motion_id = "1";
 const int sonarPin = 0; // used with the max sonar sensor
 long anVolt, inches, cm;
 int sum = 0; 
-int avgRange = 10;
+int avgRange = 12;
 
 // Servo instances for controlling the vehicle
 Servo wheels;
 Servo esc;
+int wheels_write_value = 80;
 
 // PID variables
 double steeringOut = 0;
 double setPos = 0;
-double sKp = 1.75, sKi = 0, sKd = 0.25;
+// 1.5 0 0
+double sKp = 1.5, sKi = 0, sKd = 0;
 double posError;
 PID steeringPID(&deltaD, &steeringOut, &setPos,
                 sKp, sKi,sKd,PID::DIRECT);
                 
 double distOfWall;
 double driftOut;
-double driftSetPos = 90;
-double dKp = 1.5,dKi= .25,dKd = 0;
+//double driftSetPos = 90; // upstairs
+double driftSetPos = 70;
+
+// 1 .75 .5
+double dKp = 1,dKi= .75,dKd = .5;
 PID driftPID(&distOfWall, &driftOut, & driftSetPos,
               dKp,dKi,dKd,PID::DIRECT);
 
@@ -76,6 +83,10 @@ void setup()
 
   // Enable Serial
   Serial.begin(9600);
+  
+  // Indicator LEDs
+  pinMode(left_led, OUTPUT);
+  pinMode(right_led, OUTPUT);
   
   // Wheels and Motor
   wheels.attach(D3);
@@ -117,15 +128,27 @@ void loop()
       calcLidar();
       steeringPIDloop();
       driftPIDloop();
-      wheels.write(90+(steeringOut - driftOut)/2);
+      wheels_write_value = 90+(steeringOut - driftOut)/2;
+      
+      // Turning LEDs
+      if(wheels_write_value < 90){
+        digitalWrite(right_led, LOW);
+        digitalWrite(left_led, HIGH);
+      }
+      else if (wheels_write_value > 90){
+        digitalWrite(left_led, LOW);
+        digitalWrite(right_led, HIGH);
+      }
+        
+      wheels.write(wheels_write_value);
       //avg outputs and write them to the servo
       if(!DEBUG)
         esc.write(65);
       Serial.println("Steeringout: " + String(steeringOut));
       Serial.println("Driftout: " + String(driftOut));
   }
-  delay(10);
-  wheels.write(80);
+  //delay(10);
+  wheels.write(wheels_write_value);
   esc.write(90); 
 
 }
@@ -179,7 +202,7 @@ void calcSonar(void)
   {
     anVolt = analogRead(sonarPin) / 8;
     sum += anVolt;
-    delay(10);
+    delay(2);
   }
   inches = (sum / avgRange);    // Manal calibration 
   sum = 0;
