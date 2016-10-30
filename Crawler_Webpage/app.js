@@ -62,7 +62,7 @@ app.get('/change_motion', function(req, res){
 	// }
 	// Send to particle
 	var fnPr = particle.callFunction({
-		deviceId: '36001f000b47353235303037',	// This is the ID for "jester_jetpack"
+		deviceId: '430034000947353235303037',	// This is the ID for "jester_jetpack"
 		name: 'new_motion',						// This is the name of the function that is in the jester_jetpack on-board code
 		argument: motion_id,					// 1 = RUN, 0 = STOP
 		auth: token
