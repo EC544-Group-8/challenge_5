@@ -13,15 +13,18 @@
 //================================================
 //                     Globals
 //================================================ 
-#define MIN_SONAR_VALUE 36 // 5ft original
-#define LIDAR_CALIBRATE_DIFFERENCE 8
+#define MIN_SONAR_VALUE 30 // 5ft original
+#define LIDAR_CALIBRATE_DIFFERENCE 0 //8
 #define DEBUG 0 // 1 for debug mode, 0 for no, debug will disable motor and ultrasonic blocking
 #define DEBUG_CLOUD 0 // Debug cloud 1 will publish to particle cloud
+#define TRANSMIT_DELAY 20
 
 bool startup = true; // used to ensure startup only happens once
 int startupDelay = 1000; // time to pause at each calibration step
 double maxSpeedOffset = 45; // maximum speed magnitude, in servo 'degrees'
 double maxWheelOffset = 85; // maximum wheel turn magnitude, in servo 'degrees'
+int left_led = D6;
+int right_led = D7;
 
 // Lidar Lite V1
 #define     LIDARLite_ADDRESS   0x62        // Default I2C Address of LIDAR-Lite.
@@ -43,15 +46,17 @@ String motion_id = "0";
 const int sonarPin = 0; // used with the max sonar sensor
 long anVolt, inches, cm;
 int sum = 0; 
-int avgRange = 60;
+int avgRange = 12;
 
 // Servo instances for controlling the vehicle
 Servo wheels;
 Servo esc;
+int wheels_write_value = 80;
 
 // PID variables
 double steeringOut = 0;
 double setPos = 0;
+// 2 0 0
 double sKp = 2, sKi = 0, sKd = 0;
 double posError;
 PID steeringPID(&deltaD, &steeringOut, &setPos,
@@ -59,8 +64,11 @@ PID steeringPID(&deltaD, &steeringOut, &setPos,
                 
 double distOfWall;
 double driftOut;
-double driftSetPos = 70;
-double dKp = 1.5,dKi= 0,dKd = 0;
+double driftSetPos = 100; // upstairs
+// double driftSetPos = 70; // UAV LAB
+
+// 0.7 0 0 
+double dKp = 0.7,dKi= 0,dKd = 0;
 PID driftPID(&distOfWall, &driftOut, & driftSetPos,
               dKp,dKi,dKd,PID::DIRECT);
 
@@ -75,6 +83,10 @@ void setup()
 
   // Enable Serial
   Serial.begin(9600);
+  
+  // Indicator LEDs
+  pinMode(left_led, OUTPUT);
+  pinMode(right_led, OUTPUT);
   
   // Wheels and Motor
   wheels.attach(D3);
@@ -91,11 +103,11 @@ void setup()
   
   // PID
   steeringPID.SetSampleTime(100);
-  steeringPID.SetOutputLimits(-80,80);
+  steeringPID.SetOutputLimits(-60,60);
   steeringPID.SetMode(PID::AUTOMATIC);
   
   driftPID.SetSampleTime(100);
-  driftPID.SetOutputLimits(-80,80);
+  driftPID.SetOutputLimits(-60,60);
   driftPID.SetMode(PID::AUTOMATIC); 
 }
 
@@ -106,7 +118,7 @@ void loop()
 {
   calcSonar();
   Serial.println("Inches: " + String(inches));
-  while(inches > MIN_SONAR_VALUE || DEBUG)//motion_id == "1" && 
+  while((inches > MIN_SONAR_VALUE || DEBUG) && motion_id == "1")
   {
       calcSonar();
       String dist = String(inches);
@@ -116,14 +128,27 @@ void loop()
       calcLidar();
       steeringPIDloop();
       driftPIDloop();
-      wheels.write(90+(steeringOut - driftOut)/2);
+      wheels_write_value = 90+(steeringOut - driftOut)/2;
+      
+      // Turning LEDs
+      if(wheels_write_value < 90){
+        digitalWrite(right_led, LOW);
+        digitalWrite(left_led, HIGH);
+      }
+      else if (wheels_write_value > 90){
+        digitalWrite(left_led, LOW);
+        digitalWrite(right_led, HIGH);
+      }
+        
+      wheels.write(wheels_write_value);
       //avg outputs and write them to the servo
       if(!DEBUG)
-        esc.write(70);
+        esc.write(60);
       Serial.println("Steeringout: " + String(steeringOut));
+      Serial.println("Driftout: " + String(driftOut));
   }
-  delay(10);
-  wheels.write(80);
+  //delay(10);
+  wheels.write(wheels_write_value);
   esc.write(90); 
 
 }
@@ -177,7 +202,7 @@ void calcSonar(void)
   {
     anVolt = analogRead(sonarPin) / 8;
     sum += anVolt;
-    delay(10);
+    delay(2);
   }
   inches = (sum / avgRange);    // Manal calibration 
   sum = 0;
@@ -198,13 +223,13 @@ void calcLidar(void)
         Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
         Wire.endTransmission(); // stop transmitting
     
-        delay(20); // Wait 20ms for transmit
+        delay(TRANSMIT_DELAY); // Wait 20ms for transmit
     
         Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
         Wire.write((int)RegisterHighLowB); // sets register pointer to (0x8f)
         Wire.endTransmission(); // stop transmitting
     
-        delay(20); // Wait 20ms for transmit
+        delay(TRANSMIT_DELAY); // Wait 20ms for transmit
     
         Wire.requestFrom((int)LIDARLite_ADDRESS, 2); // request 2 bytes from LIDAR-Lite
     
@@ -213,6 +238,7 @@ void calcLidar(void)
             lidar_dist_front = Wire.read(); // receive high byte (overwrites previous reading)
             lidar_dist_front = lidar_dist_front << 8; // shift high byte to be high 8 bits
             lidar_dist_front |= Wire.read(); // receive low byte as lower 8 bits
+            lidar_dist_front += LIDAR_CALIBRATE_DIFFERENCE;
             if(lidar_dist_front > 140 || lidar_dist_front < 10)
             {
                 lidar_dist_front = last_lidar_dist_front;
@@ -238,13 +264,13 @@ void calcLidar(void)
         Wire.write((int)MeasureValue); // sets register pointer to  (0x00)  
         Wire.endTransmission(); // stop transmitting
     
-        delay(20); // Wait 20ms for transmit
+        delay(TRANSMIT_DELAY); // Wait 20ms for transmit
     
         Wire.beginTransmission((int)LIDARLite_ADDRESS); // transmit to LIDAR-Lite
         Wire.write((int)RegisterHighLowB); // sets register pointer to (0x8f)
         Wire.endTransmission(); // stop transmitting
     
-        delay(20); // Wait 20ms for transmit
+        delay(TRANSMIT_DELAY); // Wait 20ms for transmit
     
         Wire.requestFrom((int)LIDARLite_ADDRESS, 2); // request 2 bytes from LIDAR-Lite
     
@@ -282,7 +308,7 @@ void calcLidar(void)
   {
       distOfWall = lidar_dist_back;
   }
-  deltaD -= LIDAR_CALIBRATE_DIFFERENCE;
+//   deltaD -= LIDAR_CALIBRATE_DIFFERENCE;
   //distOfWall = (lidar_dist_back + lidar_dist_front)/2;
   if (DEBUG_CLOUD)
     Particle.publish("DELTA", String(deltaD));
