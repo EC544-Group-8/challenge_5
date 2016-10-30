@@ -14,17 +14,11 @@
 //                     Globals
 //================================================ 
 #define MIN_SONAR_VALUE 30 // 5ft original
-<<<<<<< HEAD
+
 #define LIDAR_CALIBRATE_DIFFERENCE 0 //8
 #define DEBUG 0 // 1 for debug mode, 0 for no, debug will disable motor and ultrasonic blocking
 #define DEBUG_CLOUD 0 // Debug cloud 1 will publish to particle cloud
 #define TRANSMIT_DELAY 20
-=======
-#define LIDAR_CALIBRATE_DIFFERENCE 8
-#define DEBUG 0 // 1 for debug mode, 0 for no, debug will disable motor and ultrasonic blocking
-#define DEBUG_CLOUD 0 // Debug cloud 1 will publish to particle cloud
-#define TRANSMIT_DELAY 15
->>>>>>> e1dbc6cb809d60a26039e90729fb4cf6a09d4d09
 
 bool startup = true; // used to ensure startup only happens once
 int startupDelay = 1000; // time to pause at each calibration step
@@ -53,11 +47,8 @@ String motion_id = "0";
 const int sonarPin = 0; // used with the max sonar sensor
 long anVolt, inches, cm;
 int sum = 0; 
-<<<<<<< HEAD
 int avgRange = 12;
-=======
-int avgRange = 10;
->>>>>>> e1dbc6cb809d60a26039e90729fb4cf6a09d4d09
+
 
 // Servo instances for controlling the vehicle
 Servo wheels;
@@ -67,28 +58,21 @@ int wheels_write_value = 80;
 // PID variables
 double steeringOut = 0;
 double setPos = 0;
-<<<<<<< HEAD
 // 2 0 0
 double sKp = 2, sKi = 0, sKd = 0;
-=======
-double sKp = 2.0, sKi = 0, sKd = 0.1;
->>>>>>> e1dbc6cb809d60a26039e90729fb4cf6a09d4d09
+
 double posError;
 PID steeringPID(&deltaD, &steeringOut, &setPos,
                 sKp, sKi,sKd,PID::DIRECT);
                 
 double distOfWall;
 double driftOut;
-<<<<<<< HEAD
 double driftSetPos = 100; // upstairs
 // double driftSetPos = 70; // UAV LAB
 
 // 0.7 0 0 
 double dKp = 0.7,dKi= 0,dKd = 0;
-=======
-double driftSetPos = 90;
-double dKp = 1.5,dKi= .25,dKd = 0;
->>>>>>> e1dbc6cb809d60a26039e90729fb4cf6a09d4d09
+
 PID driftPID(&distOfWall, &driftOut, & driftSetPos,
               dKp,dKi,dKd,PID::DIRECT);
 
@@ -163,11 +147,8 @@ void loop()
       wheels.write(wheels_write_value);
       //avg outputs and write them to the servo
       if(!DEBUG)
-<<<<<<< HEAD
         esc.write(60);
-=======
-        esc.write(65);
->>>>>>> e1dbc6cb809d60a26039e90729fb4cf6a09d4d09
+
       Serial.println("Steeringout: " + String(steeringOut));
       Serial.println("Driftout: " + String(driftOut));
   }
