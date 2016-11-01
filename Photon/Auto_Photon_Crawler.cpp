@@ -13,8 +13,7 @@
 //================================================
 //                     Globals
 //================================================ 
-#define MIN_SONAR_VALUE 30 // 5ft original
-
+#define MIN_SONAR_VALUE 40 // 5ft original
 #define LIDAR_CALIBRATE_DIFFERENCE 0 //8
 #define DEBUG 0 // 1 for debug mode, 0 for no, debug will disable motor and ultrasonic blocking
 #define DEBUG_CLOUD 0 // Debug cloud 1 will publish to particle cloud
@@ -49,7 +48,6 @@ long anVolt, inches, cm;
 int sum = 0; 
 int avgRange = 12;
 
-
 // Servo instances for controlling the vehicle
 Servo wheels;
 Servo esc;
@@ -59,8 +57,8 @@ int wheels_write_value = 80;
 double steeringOut = 0;
 double setPos = 0;
 // 2 0 0
-double sKp = 2, sKi = 0, sKd = 0;
-
+//2 0 .04
+double sKp = 2.2, sKi = 0.0, sKd = .05;
 double posError;
 PID steeringPID(&deltaD, &steeringOut, &setPos,
                 sKp, sKi,sKd,PID::DIRECT);
@@ -71,8 +69,8 @@ double driftSetPos = 100; // upstairs
 // double driftSetPos = 70; // UAV LAB
 
 // 0.7 0 0 
-double dKp = 0.7,dKi= 0,dKd = 0;
-
+// 0.7 0 0.04
+double dKp = 0.7,dKi= 0.0,dKd = 0.04;
 PID driftPID(&distOfWall, &driftOut, & driftSetPos,
               dKp,dKi,dKd,PID::DIRECT);
 
@@ -147,8 +145,7 @@ void loop()
       wheels.write(wheels_write_value);
       //avg outputs and write them to the servo
       if(!DEBUG)
-        esc.write(60);
-
+        esc.write(60); // originally 60 as the prime value
       Serial.println("Steeringout: " + String(steeringOut));
       Serial.println("Driftout: " + String(driftOut));
   }
